@@ -88,7 +88,12 @@ func DecodeTags(rr io.Reader) (sound.Tags, error) {
 	r := ogg.NewReader(rr)
 	r.NextPage()
 	r.NextPage()
-	_, comment, err := readComment(r)
+
+	err := readPacketPreamble(r, commentPreamble)
+	if err != nil {
+		return nil, errors.New("malformed Vorbis Comment preamble")
+	}
+	_, comment, err := ReadComment(r)
 	return comment, err
 }
 
@@ -109,7 +114,11 @@ func DecodeMeta(rr io.Reader, fsize int64) (sound.Metadata, error) {
 		return nil, ErrMissingFramingBit
 	}
 
-	_, comment, err := readComment(r)
+	err = readPacketPreamble(r, commentPreamble)
+	if err != nil {
+		return nil, errors.New("malformed Vorbis Comment preamble")
+	}
+	_, comment, err := ReadComment(r)
 	if err != nil {
 		return nil, err
 	}
@@ -139,12 +148,7 @@ func decodeMeta(r io.Reader) (sound.Metadata, error) {
 	panic("aaa")
 }
 
-func readComment(r io.Reader) (string, Comment, error) {
-	err := readPacketPreamble(r, commentPreamble)
-	if err != nil {
-		return "", nil, err
-	}
-
+func ReadComment(r io.Reader) (string, Comment, error) {
 	vendor, err := readString(r)
 	if err != nil {
 		return "", nil, err
@@ -240,13 +244,17 @@ var dateFormats = []string{
 }
 
 func (c Comment) Title() string       { return c.GetAll("TITLE") }
-func (c Comment) AlbumArtist() string { return "" }
+func (c Comment) AlbumArtist() string { return c.GetAll("ALBUMARTIST") }
 func (c Comment) Artist() string      { return c.GetAll("ARTIST") }
 func (c Comment) Album() string       { return c.GetAll("ALBUM") }
 func (c Comment) Genre() string       { return c.GetAll("GENRE") }
-func (c Comment) Disc() int           { return 1 }
-func (c Comment) Composer() string    { return "" }
+func (c Comment) Composer() string    { return c.GetAll("COMPOSER") }
 func (c Comment) Notes() string       { return c.Get("DESCRIPTION") }
+
+func (c Comment) Disc() int {
+	n, _ := strconv.Atoi(c.Get("DISCNUMBER"))
+	return n
+}
 
 func (c Comment) Track() int {
 	n, _ := strconv.Atoi(c.Get("TRACKNUMBER"))
